@@ -10,7 +10,7 @@ module func(input clk_i,
     localparam SQRT = 3'b001;
     localparam CUBE = 3'b010;
     localparam SUM = 3'b100;    
-    reg [2:0] state;
+    reg [2:0] state = IDLE;
     reg [2:0] state_next;
     reg [7:0] a;
     wire [7:0] sqrt_bo;
@@ -42,10 +42,10 @@ module func(input clk_i,
     .y_bo(sqrt_bo)
     );
     
-    reg calc_start = 0;
+    
     assign sqrt_start = state_next[0];
     assign cube_start = state_next[1];
-    assign busy_o     = (state != IDLE) | !calc_start;
+    assign busy_o     = (state != IDLE); 
     assign sum_result = a + sqrt_result;
     always @(posedge clk_i)
         if (rst_i) begin
@@ -68,13 +68,11 @@ module func(input clk_i,
             a <= 0;
             y_bo <= 0;
             sqrt_result <= 0;
-            calc_start <= 0;
         end else begin
             case (state)
                 IDLE:
                 if (start_i) begin
                     a <= a_bi;
-                    calc_start <= 1;
                 end
                 SQRT: begin
                     if (!sqrt_busy) begin
@@ -111,7 +109,7 @@ module mul(
     wire [15:0] shifted_part_sum;
     reg [7:0] a, b;
     reg [15:0] part_res;
-    reg state;
+    reg state = IDLE;
     
     assign part_sum = a & {8{b[ctr]}};
     assign shifted_part_sum = part_sum << ctr;
@@ -166,7 +164,7 @@ module sqrt(input clk_i,
     reg [7:0] b;
     reg [7:0] m;
     reg [7:0] y;
-    reg state;
+    reg state = IDLE;
     reg[7:0] bw, xw, y_temp, yw, mw;
     assign end_step = (m == END);
     assign busy_o   = state;
@@ -185,6 +183,7 @@ module sqrt(input clk_i,
                     state <= WORK;
                     m     <= 1 << START;
                     x     <= x_bi;
+                    y     <= 0;
                 end
                 WORK:
                 begin
@@ -259,6 +258,7 @@ always @(posedge clk_i)
                     x <= x_bi;
                     y_bo <= 0;
                     b <= 1 << s;
+                    y <= 0;
                 end
             WORK:
                 begin

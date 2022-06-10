@@ -11,7 +11,7 @@
 
 `define RVNOPE_INST 32'h00000013
 
-`define FUNC_RESET   3'h0
+`define FUNC_IDLE   3'h0
 `define FUNC_START   3'h1
 
 //ALU commands

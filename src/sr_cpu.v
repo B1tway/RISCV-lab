@@ -52,12 +52,12 @@ module sr_cpu
     wire [31:0] pc;
     wire [31:0] pcBranch = pc + immB;
     wire [31:0] pcPlus4  = pc + 4;
-    wire [31:0] pcNext   = funcBusy ? pc : (pcSrc ? pcBranch : pcPlus4);
+    wire [31:0] pcNext   = funcBusy | funcIRQ? pc : (pcSrc ? pcBranch : pcPlus4);
     sm_register r_pc(clk ,rst_n, pcNext, pc);
 
     //program memory access
     assign imAddr = pc >> 2;
-    wire [31:0] instr = funcBusy ? 32'h00000013 :imData;
+    wire [31:0] instr = funcBusy | funcIRQ ? 32'h00000013 :imData;
 
 
     wire [4:0]  proxyRd;
@@ -149,6 +149,7 @@ module sr_cpu
     
     func_unit fn_unit(
     .clk(clk),
+    .rst(rst),
     .rd_i( proxyRd ),
     .srcA(rd1),
     .srcB(srcB),
@@ -315,7 +316,7 @@ module sr_unit_selector
                 1'b0: if (~funcBusy) begin
                     unitResult   = aluResult;
                     aluControl   = unitControl;
-                    funcControl   = `FUNC_RESET;
+                    funcControl   = `FUNC_IDLE;
                 end else begin 
                     unitResult   = funcResult;
                     funcControl   = 1'b1;
@@ -331,12 +332,13 @@ endmodule
 module func_unit
 (
     input         clk,
+    input         rst,
     input  [4:0]  rd_i,
     input  [31:0] srcA,
     input  [31:0] srcB,
     input  [2:0]  oper,
     output reg [31:0] result,
-    output       busy,
+    output busy,
     output       irq,
     output reg [4:0] rd_o
 );
@@ -347,13 +349,12 @@ localparam WORK = 1'b1;
 wire fn_busy;
 
 reg state = IDLE;
-
-reg start = 0;
-reg rst   = 1;
+reg res_unsaved = 0;
 reg rbusy = 0;
+reg start = 0;
 reg rirq = 0;
-assign busy = rbusy;
 assign irq = rirq;
+assign busy = start | fn_busy | res_unsaved;
 reg [31:0] a_bi;
 reg [31:0] b_bi;
 wire [63:0] y_bo;
@@ -368,48 +369,33 @@ func fn (
     .y_bo      ( y_bo     )
 );
 
-    always @ ( posedge clk )
-        if ( oper == `FUNC_RESET ) begin
-            // set up signals for my block
-            a_bi     <= 0;
-            b_bi     <= 0;
-            start    <= 0;
-            rst      <= 1;
-
-            result   <= 0;
-            rd_o     <= 0;
-
-            
-            rirq      <= 0;
-            state    <= IDLE;
-            rbusy     <= 0;
-        end
-        else case ( state )
+    always @ ( posedge clk ) begin
+        if ( oper == `FUNC_IDLE ) begin
+            start <= 0;
+            rirq   <= 0;
+        end else case ( state )
             IDLE: if ( oper == `FUNC_START ) begin
-                // set up signals for my block
                 a_bi  <= srcA;
                 b_bi  <= srcB;
                 start <= 1;
-                rst   <= 0;
-
-                // remember the destination register
                 rd_o  <= rd_i;
+                res_unsaved = 1;
                 state <= WORK;
-                rbusy  <= 1;
             end else begin
                 start <= 0;
-                rst   <= 1;
-
                 rirq   <= 0;
-                rbusy  <= 0;
             end
-            WORK: if ( !fn_busy ) begin
+            WORK: if ( !(start | fn_busy) ) begin
                 result            <= y_bo;
                 state             <= IDLE;
                 rirq               <= 1;
+                res_unsaved <= 0; 
+            end else begin
+                start <= 0;
             end
+    
         endcase
-
+    end
 endmodule
 
 
